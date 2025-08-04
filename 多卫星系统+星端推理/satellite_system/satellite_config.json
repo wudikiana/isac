@@ -1,0 +1,78 @@
+{
+  "satellites": {
+    "sat_001": {
+      "ip": "127.0.0.1",
+      "port": 8081,
+      "compute_capacity": 1e12,
+      "memory_capacity": 8192,
+      "coverage_area": {"lat": [35, 45], "lon": [110, 130]},
+      "orbit_period": 90.0,
+      "supported_features": ["inference", "training", "communication", "sar_imaging"]
+    },
+    "sat_002": {
+      "ip": "127.0.0.1",
+      "port": 8082,
+      "compute_capacity": 1.2e12,
+      "memory_capacity": 10240,
+      "coverage_area": {"lat": [30, 40], "lon": [115, 135]},
+      "orbit_period": 90.0,
+      "supported_features": ["inference", "training", "communication", "sar_imaging"]
+    },
+    "sat_003": {
+      "ip": "127.0.0.1",
+      "port": 8083,
+      "compute_capacity": 0.8e12,
+      "memory_capacity": 6144,
+      "coverage_area": {"lat": [25, 35], "lon": [110, 130]},
+      "orbit_period": 90.0,
+      "supported_features": ["inference", "training", "communication", "sar_imaging"]
+    }
+  },
+  "training": {
+    "sync_interval": 300,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "epochs_per_sync": 5
+  },
+  "coverage": {
+    "update_interval": 60,
+    "prediction_horizon": 3600
+  },
+  "local_backup": {
+    "model_path": "models/best_multimodal_patch_model.pth",
+    "quantized_model_path": "models/quantized_seg_model.pt"
+  },
+  "emergency_response": {
+    "response_timeout": 300,
+    "max_concurrent_emergencies": 5,
+    "ppo_learning_rate": 0.0003,
+    "ppo_clip_ratio": 0.2
+  },
+  "federated_learning": {
+    "sync_interval": 600,
+    "min_participants": 2,
+    "aggregation_method": "fedavg",
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs_per_round": 5,
+    "enable_quantization": true,
+    "quantization_method": "dynamic",
+    "quantized_model_path": "models/quantized_federated_model.pt"
+  },
+  "cognitive_radio": {
+    "available_bands": [2.4e9, 5.8e9, 12e9, 18e9, 24e9, 30e9],
+    "max_bandwidth": 20e6,
+    "interference_threshold": 0.1
+  },
+  "orbit_control": {
+    "collision_threshold": 500,
+    "formation_threshold": 1000,
+    "fuel_efficiency": 0.8,
+    "maneuver_planning": "fuel_optimal"
+  },
+  "inference": {
+    "task_timeout": 30.0,
+    "max_queue_size": 1000,
+    "cache_size": 100
+  }
+} 
