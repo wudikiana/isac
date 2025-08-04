@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "C:\Users\rhy\Desktop\挑战杯小组作业\inference\run_inference.py", line 15, in <module>
+    from models.starlite_cnn import create_starlite_model
+  File "C:\Users\rhy\Desktop\挑战杯小组作业\models\__init__.py", line 2, in <module>
+    from .starlite_cnn import StarliteCNN, create_starlite_model
+ImportError: cannot import name 'StarliteCNN' from 'models.starlite_cnn' (C:\Users\rhy\Desktop\挑战杯小组作业\models\starlite_cnn.py)
