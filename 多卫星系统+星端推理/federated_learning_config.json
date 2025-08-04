@@ -1,0 +1,43 @@
+{
+  "federated_learning": {
+    "min_participants": 2,
+    "aggregation_method": "fedavg",
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs_per_round": 5,
+    "sync_interval": 600,
+    
+    "parameter_validation_enabled": true,
+    "min_data_size": 10,
+    "max_data_size": 1000000,
+    "min_loss_threshold": 1e-6,
+    "max_loss_threshold": 100.0,
+    
+    "gradient_clip_norm": 1.0,
+    "parameter_backup_count": 3,
+    "max_parameter_age": 3600
+  },
+  
+  "training": {
+    "sync_interval": 300,
+    "max_backup_age": 7200
+  },
+  
+  "network": {
+    "connection_timeout": 30,
+    "retry_attempts": 3,
+    "retry_delay": 5
+  },
+  
+  "security": {
+    "enable_checksum_validation": true,
+    "enable_parameter_encryption": false,
+    "max_parameter_size": 100000000
+  },
+  
+  "monitoring": {
+    "enable_performance_monitoring": true,
+    "log_level": "INFO",
+    "metrics_collection_interval": 60
+  }
+} 

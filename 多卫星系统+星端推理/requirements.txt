@@ -1,0 +1,22 @@
+segmentation-models-pytorch
+# 主干深度学习库
+torch
+# 科学计算
+numpy
+# 图像处理
+pillow
+# 可视化
+matplotlib
+# EfficientNet结构（如需）
+efficientnet_pytorch
+# Excel报告支持
+openpyxl
+# 进度条（如训练/推理时用到）
+tqdm
+# 其它可选依赖
+scikit-learn 
+# 系统监控
+psutil
+# 后处理优化
+scikit-image
+scipy 

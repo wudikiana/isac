@@ -1,0 +1,12 @@
+2025-07-26 13:29:27,863 - INFO - 程序启动
+2025-07-26 13:29:27,863 - INFO - 开始训练流程...
+2025-07-26 13:29:27,863 - INFO - 当前时间: 2025-07-26 13:29:27
+2025-07-26 13:29:27,863 - INFO - 创建数据加载器...
+2025-07-26 13:29:27,863 - ERROR - 训练过程中出错: name 'get_multimodal_patch_dataloaders' is not defined
+2025-07-26 13:29:27,863 - ERROR - 异常详情:
+Traceback (most recent call last):
+  File "C:\Users\rhy\Desktop\挑战杯小组作业\train_model.py", line 619, in main
+    train_loader, val_loader = get_multimodal_patch_dataloaders(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name 'get_multimodal_patch_dataloaders' is not defined
+2025-07-26 13:29:27,879 - INFO - 程序退出，代码: 1
