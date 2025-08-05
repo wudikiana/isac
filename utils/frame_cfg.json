@@ -1,0 +1,109 @@
+{
+  "system_parameters": {
+      "frequency_GHz": 12.0,
+      "bandwidth_MHz": 300.0,
+      "duplex_mode": "TDD",
+      "subcarrier_spacing_kHz": 60,
+      "symbol_duration_us": 16.67,
+      "frame_length_ms": 10.0,
+      "num_satellites": 3,
+      "num_targets": 2,
+      "satellite_spacing_km": 500.0
+  },
+  "communication": {
+      "max_tx_power_W": 80.0,
+      "antenna_gain_dBi": 32.0,
+      "beamwidth_deg": 10.0,
+      "modulation": {
+          "type": "OFDM",
+          "mcs_table": [
+              {"index": 0, "mod": "QPSK", "code_rate": 0.2, "required_snr_dB": 3},
+              {"index": 1, "mod": "16QAM", "code_rate": 0.5, "required_snr_dB": 10},
+              {"index": 2, "mod": "64QAM", "code_rate": 0.8, "required_snr_dB": 20}
+          ],
+          "adaptive_modulation": true
+      },
+      "channel_model": {
+          "noise_temp_K": 290,
+          "path_loss_exponent": 2.2,
+          "rain_attenuation_db": 2.0,
+          "shadowing_std_db": 3.0,
+          "fading_model": "Rician",
+          "k_factor_db": 10.0
+      },
+      "qos_requirements": {
+          "min_throughput_Mbps": 10.0,
+          "max_latency_ms": 50.0,
+          "reliability": 0.999
+      }
+  },
+  "radar": {
+      "pulse_width_us": 10.0,
+      "pri_us": 100.0,
+      "rcs_m2": 1.5,
+      "antenna_gain_dBi": 38.0,
+      "beamwidth_deg": 5.0,
+      "min_detectable_snr_dB": 5.0,
+      "max_range_km": 2000.0,
+      "range_resolution_m": 30.0,
+      "waveform": {
+          "type": "OFDM-LFM",
+          "chirp_bandwidth_MHz": 100.0,
+          "subcarriers_radar_ratio": 0.4,
+          "pulse_compression": true,
+          "stagger_pri": true
+      },
+      "detection": {
+          "false_alarm_rate": 1e-6,
+          "detection_probability": 0.9,
+          "cfar_window": [10, 5]
+      }
+  },
+  "joint_resource_allocation": {
+      "time_sharing": [
+          {"slot": 0, "function": "radar", "symbols": [0, 1, 2]},
+          {"slot": 1, "function": "comm", "symbols": [3, 4, 5, 6]},
+          {"slot": 2, "function": "guard", "symbols": [7]}
+      ],
+      "frequency_sharing": {
+          "total_subcarriers": 1024,
+          "comm_subcarriers": [0, 614],
+          "radar_subcarriers": [615, 1023],
+          "guard_band_subcarriers": [613, 616],
+          "flexible_allocation": true
+      },
+      "power_allocation": {
+          "max_power_per_satellite_W": 30.0,
+          "min_power_per_target_W": 0.5,
+          "power_sharing": true
+      },
+      "multi_satellite_coordination": {
+          "interference_avoidance": true,
+          "handover_threshold_dB": 3.0,
+          "coverage_overlap_km": 200.0
+      }
+  },
+  "constraints": {
+      "max_papr_dB": 8.0,
+      "max_tx_power_dBm": 46.0,
+      "latency_ms": 10.0,
+      "interference_threshold_dB": -15,
+      "energy_efficiency": 8e6,
+      "spectral_efficiency": 1.8
+  },
+  "adaptive_parameters": {
+      "resource_update_interval_ms": 100,
+      "snr_margin_dB": 3.0,
+      "fairness_weights": {
+          "throughput": 0.5,
+          "detection_prob": 0.4,
+          "fairness": 0.1
+      },
+      "drl_config": {
+          "state_dim": 256,
+          "action_dim": 6,
+          "hidden_layers": [128, 64],
+          "learning_rate": 3e-4
+      }
+  }
+}
