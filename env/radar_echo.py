@@ -19,10 +19,9 @@ class RadarEcho:
         if config:
             self.config.update(config)
         
-        # 当前SNR值
         self.current_snr = 0.0
+        self.detection_prob = 0.0  # 新增属性
         
-    # radar_echo.py 核心修改
     def update(self, R_km: float, Pt: float, B: float) -> float:
         """物理正确的雷达方程实现"""
         # 参数强制约束（带单位转换）
@@ -48,9 +47,21 @@ class RadarEcho:
         snr_db = 10 * np.log10(snr_linear + 1e-10)  # 避免log(0)
         
         # 强制合理范围并更新状态
-        self.current_snr = np.clip(snr_db, -10, 50)  # 限制在-10~50dB
+        self.current_snr = np.clip(snr_db, -10, 50)
+        
+        # 新增感知精度计算
+        self.detection_prob = self._calculate_detection_prob(self.current_snr)
         return self.current_snr
     
+    def _calculate_detection_prob(self, snr_db: float) -> float:
+        excess_snr = snr_db - self.config["radar_snr_thresh"]
+        return 1 / (1 + np.exp(-1.0 * (excess_snr + 5)))  # 偏移5dB，避免突变
+    
+    def get_range_resolution(self, bandwidth: float) -> float:
+        """获取距离分辨率(米)"""
+        return c / (2 * bandwidth)
+    
+    # ...保留原有的plot_snr_vs_distance、plot_range_profile等方法...
     def plot_snr_vs_distance(self, distances_km: list, Pt: float, B: float, 
                            save_to_wandb: bool = True, title: str = None):
         """
@@ -124,41 +135,3 @@ class RadarEcho:
             "messages": ["RadarEcho operational"],
             "config": self.config
         }
-    
-    @staticmethod
-    def radar_snr_model(R_km, Pt=1e3, G=30, sigma=1, freq=10e9, T=290, B=1e6):
-        """
-        计算雷达回波 SNR
-        :param R_km: 目标距离 (km)
-        :param Pt: 发射功率 (W)
-        :param G: 天线增益 (dB)
-        :param sigma: 目标RCS (m²)
-        :param freq: 雷达频率 (Hz)
-        :param T: 噪声温度 (K)
-        :param B: 带宽 (Hz)
-        :return: SNR (dB)
-        """
-        R = R_km * 1e3  # 转换为米
-        wavelength = c / freq
-        G_linear = 10 ** (G / 10)  # dB -> 线性值
-        
-        # 雷达方程计算 SNR
-        numerator = Pt * (G_linear ** 2) * (wavelength ** 2) * sigma
-        denominator = (4 * np.pi) ** 3 * (R ** 4) * 1.38e-23 * T * B
-        snr_linear = numerator / denominator
-        return 10 * np.log10(snr_linear)
-
-if __name__ == "__main__":
-    # 测试雷达回波模型
-    print("===== 测试雷达回波模型 =====")
-    radar = RadarEcho()
-    
-    # 测试不同距离的SNR
-    distances = [100, 200, 500, 1000]
-    for dist in distances:
-        snr = radar.update(dist, 1000, 1e6)
-        print(f"距离 {dist}km 时的雷达 SNR: {snr:.2f} dB")
-    
-    # 自检
-    print("\n===== 自检结果 =====")
-    print(radar.check())
