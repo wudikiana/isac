@@ -32,14 +32,14 @@ class ISAC_SatEnv(gym.Env):
             "tx_gain": 32.0,  # 发射增益(dB)
             "rx_gain": 28.0,   # 接收增益(dB)
             "comm_noise_temp": 290.0,
-            "comm_snr_thresh": 5.0,  # SNR阈值(dB)
+            "comm_snr_thresh": 30.0,  # SNR阈值(dB)
             
             # 雷达参数
             "radar_freq": 10e9,
             "radar_gain": 38.0,
             "target_rcs": 1.5,  # 目标截面积(m²)
             "radar_noise_temp": 290.0,
-            "radar_snr_thresh": -10.0,
+            "radar_snr_thresh": 5.0,
             
             # 目标参数
             "init_distance": 500.0,  # 初始距离(km)
@@ -50,8 +50,9 @@ class ISAC_SatEnv(gym.Env):
             "num_targets": 2,
             
             # 奖励参数
-            "comm_reward_weight": 0.6,
+            "comm_reward_weight": 0.5,
             "radar_reward_weight": 0.4,
+            "accuracy_weight": 0.1,
             "fairness_weight": 0.1,
             "action_penalty_weight": 0.001,
             
@@ -149,12 +150,15 @@ class ISAC_SatEnv(gym.Env):
         reward = self._calc_reward(comm_snrs, radar_snrs)
         reward += self.config["fairness_weight"] * (fairness_comm + fairness_radar)
         
-        # 5. 收集信息
+        # 5. 收集信息（新增吞吐量、感知精度、时延）
         info = {
             "targets": info_targets,
             "fairness_comm": fairness_comm,
             "fairness_radar": fairness_radar,
-            "step": self.current_step
+            "step": self.current_step,
+            "avg_throughput": np.mean([t["comm"]["throughput"] for t in info_targets]),
+            "avg_detection_prob": np.mean([t["radar"]["detection_prob"] for t in info_targets]),
+            "avg_latency": np.mean([t["comm"]["latency"] for t in info_targets])
         }
         self.history.append(info)
         self.current_step += 1
@@ -169,7 +173,6 @@ class ISAC_SatEnv(gym.Env):
         return self._get_obs(), reward, done, info
 
     def _allocate_resources(self, action: np.ndarray) -> Tuple[List[float], List[float], List[Dict]]:
-        """资源分配核心逻辑"""
         comm_snrs = []
         radar_snrs = []
         info_targets = []
@@ -185,11 +188,11 @@ class ISAC_SatEnv(gym.Env):
             comm_bw = total_bw * action[i, 1] / self.num_targets
             radar_bw = total_bw * (1 - action[i, 1]) / self.num_targets
             
-            # 2. 更新距离（带随机扰动）
+            # 2. 更新距离
             self.target_distance[i] += self.config["target_speed"] * (1 + 0.05*np.random.randn())
             self.target_distance[i] = max(min_distance, self.target_distance[i])
             
-            # 3. 计算SNR（带保护）
+            # 3. 计算SNR（会自动更新detection_prob）
             comm_snr = np.clip(
                 self.comm[i].update(self.target_distance[i], comm_power, comm_bw),
                 -30, 50
@@ -199,29 +202,32 @@ class ISAC_SatEnv(gym.Env):
                 -30, 50
             )
             
-            # 4. 记录信息
-            comm_snrs.append(comm_snr)
-            radar_snrs.append(radar_snr)
+            # 4. 记录信息（添加detection_prob和range_resolution）
             info_targets.append({
                 "comm": {
                     "snr": comm_snr,
                     "power": comm_power,
                     "bandwidth": comm_bw,
-                    "threshold": self.config["comm_snr_thresh"]
+                    "threshold": self.config["comm_snr_thresh"],
+                    "throughput": self.comm[i].throughput / 1e6,
+                    "latency": 10 * (1 - np.clip(action[i, 0], 0.1, 0.9))
                 },
                 "radar": {
                     "snr": radar_snr,
                     "power": radar_power,
                     "bandwidth": radar_bw,
-                    "threshold": self.config["radar_snr_thresh"]
+                    "threshold": self.config["radar_snr_thresh"],
+                    "detection_prob": self.radar[i].detection_prob,  # 新增检测概率
+                    "range_resolution": self.radar[i].get_range_resolution(radar_bw)  # 新增距离分辨率
                 },
                 "distance": self.target_distance[i],
                 "target_id": i
             })
+            comm_snrs.append(comm_snr)
+            radar_snrs.append(radar_snr)
             
         return comm_snrs, radar_snrs, info_targets
 
-    # isac_sat_env.py 修改部分
     def _calc_reward(self, comm_snrs, radar_snrs):
         """工业级稳健奖励函数（强制数值范围）"""
         # 1. 基础检查（防止数值溢出）
@@ -249,24 +255,6 @@ class ISAC_SatEnv(gym.Env):
         compressed = 100 * np.tanh(raw_reward / 1000)  # 使用双曲正切压缩
         return np.clip(compressed, 0, 100)  # 最终限制在0-100
 
-    def _normalized_score(self, snrs, threshold, max_score):
-        """动态归一化性能评分"""
-        excess = [max(0, s - threshold) for s in snrs]
-        avg_excess = np.mean(excess) if excess else 0
-        return min(max_score, avg_excess * (max_score / 5))  # 每5dB得满分
-
-    def _stability_bonus(self, comm_snrs, radar_snrs):
-        """稳定性奖励（避免剧烈波动）"""
-        comm_stable = np.std(comm_snrs) < 2  # SNR波动小于2dB
-        radar_stable = np.std(radar_snrs) < 2
-        return 10 * (int(comm_stable) + int(radar_stable))
-
-    def _efficiency_penalty(self):
-        """资源效率惩罚"""
-        total_used = np.sum(self.last_action)
-        ideal_usage = self.num_targets * 1.0  # 理想总资源量
-        return 20 * (1 - min(1, abs(total_used - ideal_usage) / ideal_usage))
-
     def _get_obs(self) -> np.ndarray:
         """获取当前观测"""
         obs = np.concatenate([
@@ -285,26 +273,32 @@ class ISAC_SatEnv(gym.Env):
         return (np.sum(values) ** 2) / (len(values) * np.sum(values ** 2) + 1e-8)
 
     def _log_to_wandb(self, reward: float, info: Dict):
-        """记录数据到WandB"""
+        """记录数据到WandB（新增指标记录）"""
         log_data = {
             "reward": reward,
             "step": info["step"],
             "fairness_comm": info["fairness_comm"],
-            "fairness_radar": info["fairness_radar"]
+            "fairness_radar": info["fairness_radar"],
+            "avg_throughput": info["avg_throughput"],
+            "avg_detection_prob": info["avg_detection_prob"],
+            "avg_latency": info["avg_latency"]
         }
         
         for tgt in info["targets"]:
             i = tgt["target_id"]
             log_data.update({
                 f"comm_snr_{i}": tgt["comm"]["snr"],
+                f"comm_throughput_{i}": tgt["comm"]["throughput"],
+                f"comm_latency_{i}": tgt["comm"]["latency"],
                 f"radar_snr_{i}": tgt["radar"]["snr"],
+                f"radar_det_prob_{i}": tgt["radar"]["detection_prob"],
                 f"distance_{i}": tgt["distance"]
             })
             
         wandb.log(log_data)
 
     def render(self, mode='human'):
-        """可视化环境状态（完整子图版）"""
+        """可视化环境状态（完整子图版，新增指标显示）"""
         if not self.history:
             return None
 
@@ -365,7 +359,7 @@ class ISAC_SatEnv(gym.Env):
         plt.grid(True, alpha=0.3)
         plt.legend(fontsize=9)
         
-        # ========== 子图4：资源分配 ==========
+        # ========== 子图4：资源分配（新增指标标注） ==========
         plt.subplot(2, 2, 4)
         if self.history:
             last_step = self.history[-1]
@@ -412,6 +406,19 @@ class ISAC_SatEnv(gym.Env):
                 label='雷达带宽',
                 markersize=8
             )
+            
+            # 新增指标标注
+            for i, tgt in enumerate(last_step["targets"]):
+                plt.text(
+                    i - 0.3, max(comm_power)*1.1, 
+                    f"TP:{tgt['comm']['throughput']:.1f}Mbps\nL:{tgt['comm']['latency']:.1f}ms",
+                    fontsize=7
+                )
+                plt.text(
+                    i + 0.1, max(radar_power)*1.1,
+                    f"DP:{tgt['radar']['detection_prob']:.1%}\nRes:{tgt['radar']['range_resolution']:.1f}m",
+                    fontsize=7
+                )
             
             plt.title('当前资源分配', fontsize=12, pad=10)
             plt.gca().set_xlabel('目标编号', fontsize=10)
@@ -467,7 +474,7 @@ class ISAC_SatEnv(gym.Env):
         return is_ok, report
 
     def diagnose(self):
-        """环境诊断工具"""
+        """环境诊断工具（新增指标显示）"""
         print("\n=== Environment Diagnosis ===")
         print("Configuration:")
         print(f"- Targets: {self.num_targets}")
@@ -489,10 +496,13 @@ class ISAC_SatEnv(gym.Env):
             
             for tgt in info["targets"]:
                 print(f"Target {tgt['target_id']}:")
-                print(f"  Comm: {tgt['comm']['power']:.1f}W + {tgt['comm']['bandwidth']/1e6:.1f}MHz → {tgt['comm']['snr']:.1f}dB")
-                print(f"  Radar: {tgt['radar']['power']:.1f}W + {tgt['radar']['bandwidth']/1e6:.1f}MHz → {tgt['radar']['snr']:.1f}dB")
+                print(f"  Comm: {tgt['comm']['power']:.1f}W + {tgt['comm']['bandwidth']/1e6:.1f}MHz")
+                print(f"    → SNR: {tgt['comm']['snr']:.1f}dB | Throughput: {tgt['comm']['throughput']:.2f}Mbps | Latency: {tgt['comm']['latency']:.2f}ms")
+                print(f"  Radar: {tgt['radar']['power']:.1f}W + {tgt['radar']['bandwidth']/1e6:.1f}MHz")
+                print(f"    → SNR: {tgt['radar']['snr']:.1f}dB | Detection Prob: {tgt['radar']['detection_prob']:.2%} | Res: {tgt['radar']['range_resolution']:.2f}m")
             
             print(f"Reward: {reward:.2f} | Fairness: C={info['fairness_comm']:.2f}, R={info['fairness_radar']:.2f}")
+            print(f"Avg Throughput: {info['avg_throughput']:.2f}Mbps | Avg Detection Prob: {info['avg_detection_prob']:.2%}")
 
 def make_env(config=None):
     """环境创建函数"""
