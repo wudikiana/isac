@@ -1,137 +1,255 @@
 @echo off
-:: Satellite ISAC Project Environment Setup Script for Windows
-:: Author: DeepSeek Chat
-:: Revised Date: 2025-08-05
-:: Version: 2.0
-:: Features:
-:: - 自动检测并安装Miniconda（清华镜像）
-:: - 可靠的环境创建和依赖安装
-:: - 全面的错误检查和用户指导
-:: Usage: 右键"以管理员身份运行"（推荐）
+setlocal enabledelayedexpansion
 
-echo ===============================
-echo 卫星ISAC项目环境安装脚本 (Windows版)
-echo ===============================
-echo 注意: 推荐右键本脚本选择"以管理员身份运行"
+:: =============================================
+:: Satellite ISAC Project Setup Tool (Windows)
+:: =============================================
+title Satellite ISAC Environment Setup
+
+:: =============================================
+:: Set working directory
+:: =============================================
+set "SCRIPT_DIR=%~dp0"
+cd /d "!SCRIPT_DIR!"
+echo Working directory: %cd%
 echo.
 
-:: 初始化错误标志
-set ERR_FLAG=0
+:: =============================================
+:: Main Menu
+:: =============================================
+:menu
+cls
+echo =============================================
+echo      Satellite ISAC Project Setup Tool
+echo =============================================
+echo 1. Install with Miniconda (Recommended)
+echo 2. Install with Python Virtual Environment
+echo 3. Install directly to system Python
+echo 4. Exit
+echo.
+set /p choice="Select installation method [1-4]: "
 
-:: 1. 检查Conda安装
+if "%choice%"=="1" goto miniconda
+if "%choice%"=="2" goto venv
+if "%choice%"=="3" goto system
+if "%choice%"=="4" exit /b
+
+echo Invalid selection, please try again
+goto menu
+
+:: =============================================
+:: Option 1: Install with Miniconda
+:: =============================================
+:miniconda
+cls
+echo =============================================
+echo       Installing with Miniconda
+echo =============================================
+
+:: Check if Conda is installed
 where conda >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [1/7] 未检测到Anaconda/Miniconda，准备安装Miniconda...
-    
-    :: 下载Miniconda
-    echo [2/7] 正在从清华镜像下载Miniconda...
-    curl -f -o %TEMP%\Miniconda3-latest-Windows-x86_64.exe https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-latest-Windows-x86_64.exe || (
-        echo [错误] Miniconda下载失败，请检查网络连接
-        set ERR_FLAG=1
-        goto :ERROR_HANDLE
-    )
-    
-    :: 安装Miniconda
-    echo [3/7] 正在安装Miniconda（静默模式）...
-    start /wait "" %TEMP%\Miniconda3-latest-Windows-x86_64.exe /InstallationType=JustMe /AddToPath=1 /RegisterPython=1 /S /D=%USERPROFILE%\Miniconda3 || (
-        echo [错误] Miniconda安装失败
-        set ERR_FLAG=1
-        goto :ERROR_HANDLE
-    )
-    
-    :: 清理安装包
-    del %TEMP%\Miniconda3-latest-Windows-x86_64.exe
-    
-    echo [4/7] Miniconda安装成功！
-    echo.
-    echo 请执行以下操作：
-    echo 1. 关闭所有命令提示符窗口
-    echo 2. 重新打开新的命令提示符
-    echo 3. 再次运行此脚本以完成环境配置
-    pause
-    exit /b 0
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] Conda is already installed
+    goto conda_env
 )
 
-:: 2. 配置Conda环境
+echo [INFO] Miniconda will be installed
+echo.
+
+:: Download Miniconda
+echo [Step 1/4] Downloading Miniconda...
+powershell -Command "(New-Object Net.WebClient).DownloadFile('https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe', '%TEMP%\Miniconda3.exe')"
+if not exist "%TEMP%\Miniconda3.exe" (
+    echo [ERROR] Miniconda download failed
+    pause
+    goto menu
+)
+
+:: Install Miniconda
+echo [Step 2/4] Installing Miniconda...
+echo Installation path: %USERPROFILE%\Miniconda3
+start /wait "" "%TEMP%\Miniconda3.exe" /InstallationType=JustMe /AddToPath=1 /RegisterPython=1 /S /D=%USERPROFILE%\Miniconda3
+del "%TEMP%\Miniconda3.exe"
+
+echo [Step 3/4] Miniconda installed successfully!
+echo Please restart your command prompt or computer
+echo Then run this script again to complete setup
+pause
+exit /b
+
+:: Create Conda environment
+:conda_env
 set ENV_NAME=isac
 set PYTHON_VERSION=3.11
-set CONDA_BASE=%USERPROFILE%\Miniconda3
-set CONDA_EXE=%CONDA_BASE%\Scripts\conda.exe
 
-:: 检查是否在正确的环境中运行
-if "%CONDA_DEFAULT_ENV%" == "%ENV_NAME%" (
-    echo [注意] 检测到当前已在 %ENV_NAME% 环境中运行
-    echo 建议在base环境中运行此脚本
-    pause
-)
-
-:: 3. 创建Conda环境
-echo [5/7] 检查环境 %ENV_NAME%...
-"%CONDA_EXE%" env list | findstr "%ENV_NAME%" >nul
+echo [Step 4/4] Checking environment...
+conda env list | findstr /b /c:"%ENV_NAME%" >nul
 if %ERRORLEVEL% equ 0 (
-    echo [注意] 环境 %ENV_NAME% 已存在，跳过创建
-) else (
-    echo [6/7] 正在创建环境 %ENV_NAME% (Python %PYTHON_VERSION%)...
-    "%CONDA_EXE%" create -n %ENV_NAME% python=%PYTHON_VERSION% -y || (
-        echo [错误] 环境创建失败
-        set ERR_FLAG=1
-        goto :ERROR_HANDLE
+    echo [INFO] Environment '%ENV_NAME%' already exists
+    set /p RECREATE="Recreate environment? [y/N]: "
+    if /i "!RECREATE!"=="y" (
+        conda env remove -n %ENV_NAME% -y
+        conda create -n %ENV_NAME% python=%PYTHON_VERSION% -y
     )
-)
-
-:: 4. 在新环境中安装依赖
-echo [7/7] 正在配置依赖项...
-echo 将使用清华PyPI镜像加速安装...
-"%CONDA_EXE%" run -n %ENV_NAME% pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-"%CONDA_EXE%" run -n %ENV_NAME% pip config set install.trusted-host pypi.tuna.tsinghua.edu.cn
-
-if not exist "requirements.txt" (
-    echo 未找到requirements.txt，安装核心依赖...
-    "%CONDA_EXE%" run -n %ENV_NAME% python -m pip install --upgrade pip || (
-        echo [错误] pip升级失败
-        set ERR_FLAG=1
-        goto :ERROR_HANDLE
-    )
-    
-    :: 使用更稳定的依赖版本
-    "%CONDA_EXE%" run -n %ENV_NAME% pip install ^
-        torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 ^
-        gymnasium==1.2.0 stable-baselines3==2.3.0 ^
-        numpy==1.26.4 pandas==2.1.4 matplotlib==3.8.0 ^
-        wandb==0.16.0 optuna==3.4.0 pyyaml==6.0.1
 ) else (
-    echo 检测到requirements.txt，正在安装全部依赖...
-    "%CONDA_EXE%" run -n %ENV_NAME% pip install -r requirements.txt
+    echo [Step 4/4] Creating environment '%ENV_NAME%'...
+    conda create -n %ENV_NAME% python=%PYTHON_VERSION% -y
 )
 
 if %ERRORLEVEL% neq 0 (
-    echo [警告] 某些依赖可能安装失败
-    set ERR_FLAG=1
+    echo [ERROR] Environment creation failed
+    pause
+    goto menu
 )
 
-:: 5. 验证安装
+:: Install dependencies
+echo Installing project dependencies...
+call :install_dependencies "conda run -n %ENV_NAME%"
+
 echo.
-echo ===== 验证安装结果 =====
-"%CONDA_EXE%" run -n %ENV_NAME% python -c "import sys; print(f'Python路径: {sys.executable}')"
-"%CONDA_EXE%" run -n %ENV_NAME% python -c "import torch; print(f'PyTorch版本: {torch.__version__} | CUDA可用: {torch.cuda.is_available()}')"
-"%CONDA_EXE%" run -n %ENV_NAME% python -c "import gymnasium; print(f'Gymnasium版本: {gymnasium.__version__}')"
-"%CONDA_EXE%" run -n %ENV_NAME% python -c "import pandas as pd; print(f'Pandas版本: {pd.__version__}')"
+echo =============================================
+echo Environment setup complete!
+echo To activate the environment, run:
+echo conda activate %ENV_NAME%
+echo =============================================
+pause
+goto menu
 
-:ERROR_HANDLE
-if %ERR_FLAG% equ 0 (
-    echo.
-    echo ===== 环境配置成功完成! =====
-    echo 使用以下命令激活环境:
-    echo conda activate %ENV_NAME%
-) else (
-    echo.
-    echo ===== 遇到错误 =====
-    echo 某些步骤未能完成，请检查:
-    echo 1. 是否以管理员身份运行
-    echo 2. 网络连接是否正常
-    echo 3. 磁盘空间是否充足
-    echo 4. 查看上方的具体错误信息
+:: =============================================
+:: Option 2: Install with Python Virtual Environment
+:: =============================================
+:venv
+cls
+echo =============================================
+echo     Installing with Python Virtual Environment
+echo =============================================
+
+:: Check if Python is installed
+where python >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Python not found. Please install Python 3.7+
+    pause
+    goto menu
 )
 
+:: Check Python version
+python --version
+python -c "import sys; sys.exit(0) if sys.version_info >= (3,7) else sys.exit(1)"
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Python 3.7 or higher is required
+    pause
+    goto menu
+)
+
+:: Create virtual environment
+set VENV_NAME=isac-venv
+set VENV_DIR="%cd%\%VENV_NAME%"
+
+if exist %VENV_DIR% (
+    echo [INFO] Virtual environment already exists: %VENV_DIR%
+    set /p RECREATE="Recreate environment? [y/N]: "
+    if /i "!RECREATE!"=="y" (
+        rmdir /s /q %VENV_DIR% 2>nul
+        python -m venv %VENV_DIR%
+    )
+) else (
+    echo Creating virtual environment...
+    python -m venv %VENV_DIR%
+)
+
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Virtual environment creation failed
+    pause
+    goto menu
+)
+
+:: Install dependencies
+call :install_dependencies "call %VENV_DIR%\Scripts\activate.bat &&"
+
+echo.
+echo =============================================
+echo Environment setup complete!
+echo To activate the environment, run:
+echo %VENV_DIR%\Scripts\activate
+echo =============================================
 pause
-exit /b %ERR_FLAG%
+goto menu
+
+:: =============================================
+:: Option 3: Install directly to system Python
+:: =============================================
+:system
+cls
+echo =============================================
+echo   Install directly to system Python
+echo =============================================
+echo [WARNING] This will modify your system Python
+echo          and may affect other projects
+echo.
+set /p CONFIRM="Are you sure? [y/N]: "
+if /i not "!CONFIRM!"=="y" goto menu
+
+:: Check if Python is installed
+where python >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Python not found
+    pause
+    goto menu
+)
+
+:: Install dependencies
+call :install_dependencies ""
+
+echo.
+echo =============================================
+echo Dependencies installed successfully!
+echo =============================================
+pause
+goto menu
+
+:: =============================================
+:: Common function to install dependencies
+:: =============================================
+:install_dependencies
+set ACTIVATE_CMD=%1
+
+echo.
+echo Configuring Tsinghua PyPI mirror...
+%ACTIVATE_CMD% pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+%ACTIVATE_CMD% pip config set install.trusted-host pypi.tuna.tsinghua.edu.cn
+
+echo Upgrading pip...
+%ACTIVATE_CMD% python -m pip install --upgrade pip
+
+if exist "requirements.txt" (
+    echo Installing from requirements.txt...
+    
+    :: Create fixed requirements
+    echo numpy==1.26.4 > requirements_fixed.txt
+    echo scipy==1.13.0 >> requirements_fixed.txt
+    type requirements.txt >> requirements_fixed.txt
+    
+    %ACTIVATE_CMD% python -m pip install -r requirements_fixed.txt
+    del requirements_fixed.txt
+) else (
+    echo Installing core dependencies...
+    %ACTIVATE_CMD% python -m pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1
+    %ACTIVATE_CMD% python -m pip install gymnasium==1.2.0 stable-baselines3==2.3.0
+    %ACTIVATE_CMD% python -m pip install numpy==1.26.4 pandas==2.3.1 matplotlib==3.10.3
+    %ACTIVATE_CMD% python -m pip install wandb==0.21.0 optuna==3.6.1 pyyaml==6.0.2
+)
+
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Dependency installation failed
+    pause
+    goto menu
+)
+
+echo.
+echo Verifying installation:
+%ACTIVATE_CMD% python -c "import torch; print('PyTorch version:', torch.__version__, 'CUDA available:', torch.cuda.is_available())"
+%ACTIVATE_CMD% python -c "import gymnasium; print('Gymnasium version:', gymnasium.__version__)"
+%ACTIVATE_CMD% python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
+%ACTIVATE_CMD% python -c "try: import scipy; print('SciPy version:', scipy.__version__); except: print('SciPy not installed')"
+
+exit /b
