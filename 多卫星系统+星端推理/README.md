@@ -25,7 +25,7 @@
 ## 📁 项目结构
 
 ```
-挑战杯小组作业/
+星端推理/
 ├── satellite_system/                 # 核心卫星系统模块
 │   ├── __init__.py
 │   ├── satellite_core.py            # 核心数据结构和枚举
